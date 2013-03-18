@@ -1,0 +1,118 @@
+component epp_servo;
+
+pin out signed error;
+pin out signed read;
+pin in  float step;
+
+param rw float param-p = 1.0;
+param rw float param-d1 = 1.0;
+param rw float param-d2 = 1.0;
+param rw float param-i = 1.0;
+
+
+option singleton;
+option extra_setup;
+option extra_cleanup;
+
+function servo;
+
+variable int pos = 0;
+
+license "GPL";
+;;
+#ifdef SIM
+#include <sys/io.h>
+#include <errno.h>
+#else
+#include <asm/io.h>
+#endif
+
+static void *region1=0, *region2=0;
+
+
+#define pp   0x378
+#define pp_s pp + 1
+#define pp_c pp + 2
+#define pp_r pp + 3
+#define pp_d pp + 4
+#define pp_e pp + 0x400 + 2
+
+FUNCTION(servo) {
+  int pwm;
+  
+  // read quad
+  outb(0, pp_r);
+  read = inb(pp_d) - 128;
+  pos += read;
+  pos += step;
+  
+  error = pos;
+  
+  // calc pwm
+  pwm = pos * param_p + read * param_d1 + step * param_d2;
+  
+  if(pwm > 127){
+    pwm = 127;
+  }
+  if(pwm < -127){
+    pwm = -127;
+  }
+  
+  // write pwm
+  outb(0, pp_r);
+  outb(pwm + 127, pp_d);
+}
+
+EXTRA_SETUP() {
+  int status;
+  
+  // get hw region
+  region1 = rtapi_request_region(pp, 8, "epp_servo");
+  
+  if(!region1) {
+	  rtapi_print_msg(RTAPI_MSG_ERR, "epp_servo: ERROR: request_region(%x) failed\n", pp);
+	  rtapi_print_msg(RTAPI_MSG_ERR, "(make sure the kernel module 'parport' is unloaded)\n");
+	  hal_exit(comp_id);
+	  return(-EBUSY);
+  }
+  
+  region2 = rtapi_request_region(pp_e, 4, "epp_servo");
+	if(!region2) {
+    rtapi_release_region(pp, 8);
+    rtapi_print_msg(RTAPI_MSG_ERR, "epp_servo: ERROR: request_region(%x) failed\n", pp_e);
+	  rtapi_print_msg(RTAPI_MSG_ERR, "(make sure the kernel module 'parport' is unloaded)\n");
+    hal_exit(comp_id);
+    return(-EBUSY);
+	}
+  
+  
+  // set epp in ecr
+  outb(0x80, pp_e);
+  
+  // reg = 0 (pwm0)
+  outb(0, pp_r);
+  
+  // pwm0 = 0
+  outb(128, pp_d);
+  
+  // reg = 0
+  outb(0, pp_r);
+
+  // read and reset quad0 count
+  status = inb(pp_s) & 1;
+  if(status){
+    rtapi_print_msg(RTAPI_MSG_ERR, "Failed to communicate with epp_servo board.\n");
+    //return(-EIO);
+  }
+  
+  return(0);
+}
+
+EXTRA_CLEANUP() {
+    if(region1){
+	    rtapi_release_region(pp, 8);
+    }
+    if(region2){
+	    rtapi_release_region(pp_e, 4);
+    }
+}

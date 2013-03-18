@@ -1,0 +1,22 @@
+# components
+loadrt scope_rt num_samples=16000 
+loadrt epp_servo 
+loadrt probe_parport 
+loadrt siggen 
+loadrt threads name1=fast fp1=0 period1=50000 name2=slow period2=1000000 
+# pin aliases
+# param aliases
+# signals
+# nets
+net step siggen.0.sine => epp-servo.step
+# parameter values
+setp epp-servo.param-d1           20
+setp epp-servo.param-d2           20
+setp epp-servo.param-p           20
+setp epp-servo.servo.tmax        48087
+setp scope.sample.tmax         2493
+setp siggen.0.update.tmax         2412
+# realtime thread/function links
+addf siggen.0.update slow
+addf epp-servo.servo slow
+addf scope.sample slow
