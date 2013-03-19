@@ -1,0 +1,104 @@
+component pid "pid";
+
+description "pid";
+
+pin in bit enable;
+pin in float input;
+pin in float feedback;
+pin out float output;
+pin out float error;
+pin out bit active;
+
+
+// pid
+param rw float p_error = 0.0;
+param rw float i_error = 0.0;
+param rw float d_error = 0.0;
+
+// feedforward
+param rw float p_input = 0.0;
+param rw float d_input = 0.0;
+param rw float dd_input = 0.0;
+
+// misc
+param rw float bias = 0.0;
+param rw float disable_value = 0.0;
+param rw float max_output = 0.0;
+param rw float max_error = 0.0;
+param rw float max_error_sum = 0.0;
+param rw float max_error_d = 0.0;
+param rw float max_input_d = 0.0;
+param rw float max_input_dd = 0.0;
+
+
+// history
+variable float last_error = 0.0;
+variable float last_input = 0.0;
+variable float last_last_input = 0.0;
+variable float last_error_sum = 0.0;
+
+// integral
+variable float error_sum = 0.0;
+
+
+function pid;
+
+license "GPL";
+;;
+
+float do_pid(){
+  float result;
+  
+  // diff
+  float error_d = error - last_error;
+  float input_d = input - last_input;
+  float input_dd = input - 2 * last_input + last_last_input;
+  
+  // history
+  last_error = error;
+  last_last_input = last_input;
+  last_input = input;
+  last_error_sum = error_sum;
+  
+  // int
+  error_sum += error;
+  
+  // cut
+  if(error_d > max_error_d){error_d = max_error_d;}
+  if(error_d < -max_error_d){error_d = -max_error_d;}
+  
+  if(input_d > max_input_d){input_d = max_input_d;}
+  if(input_d < -max_input_d){input_d = -max_input_d;}
+  
+  if(input_dd > max_input_dd){input_dd = max_input_dd;}
+  if(input_dd < -max_input_dd){input_dd = -max_input_dd;}
+  
+  if(error_sum > max_error_sum){error_sum = max_error_sum;}
+  if(error_sum < -max_error_sum){error_sum = -max_error_sum;}
+  
+  // calc pid
+  result = p_error * error + i_error * error_sum + d_error * error_d + 
+           p_input * input + d_input * input_d + dd_input * input_dd +
+           bias;
+  
+  // cut output
+  if(result > max_output){result = max_output;}
+  if(result < -max_output){result = -max_output;}
+  
+  // cut int
+  if(result == max_output || result == -max_output){error_sum = last_error_sum;}
+  
+  return(result);
+}
+
+FUNCTION(pid){
+  error = input - feedback;
+  if(enable && error < max_error && error > -max_error){
+    output = do_pid();
+    active = 1;
+  }
+  else{
+    output = disable_value;
+    active = 0;
+  }
+}
