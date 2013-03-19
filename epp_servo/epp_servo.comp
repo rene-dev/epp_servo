@@ -1,22 +1,15 @@
-component epp_servo;
+component epp_servo "epp_servo";
 
-pin out signed error;
-pin out signed read;
-pin in  float step;
+description "servo interface: EMC -> parport -> FPGA -> servo amplifier";
 
-param rw float param-p = 1.0;
-param rw float param-d1 = 1.0;
-param rw float param-d2 = 1.0;
-param rw float param-i = 1.0;
-
+pin out signed quad;
+pin in  float pwm;
 
 option singleton;
 option extra_setup;
 option extra_cleanup;
 
 function servo;
-
-variable int pos = 0;
 
 license "GPL";
 ;;
@@ -38,29 +31,25 @@ static void *region1=0, *region2=0;
 #define pp_e pp + 0x400 + 2
 
 FUNCTION(servo) {
-  int pwm;
+  int pwm_tmp;
   
   // read quad
   outb(0, pp_r);
-  read = inb(pp_d) - 128;
-  pos += read;
-  pos += step;
+  quad = inb(pp_d) - 128;
+
+  // cut pwm
+  pwm_tmp = pwm;
   
-  error = pos;
-  
-  // calc pwm
-  pwm = pos * param_p + read * param_d1 + step * param_d2;
-  
-  if(pwm > 127){
-    pwm = 127;
+  if(pwm_tmp > 1){
+    pwm_tmp = 1;
   }
-  if(pwm < -127){
-    pwm = -127;
+  if(pwm_tmp < -1){
+    pwm_tmp = -1;
   }
   
   // write pwm
   outb(0, pp_r);
-  outb(pwm + 127, pp_d);
+  outb(pwm_tmp * 127 + 127, pp_d);
 }
 
 EXTRA_SETUP() {
